@@ -1,0 +1,38 @@
+#! /bin/sh
+
+#
+# Connection daemon - connects controller when all devices are ready
+#
+
+# Device paths
+controller=/dev/input/js0
+event=/dev/input/event0
+serial=/dev/ttyACM0
+
+# Wait until all devices are ready
+while true
+do
+	if [[ -e "$controller" && -e "$event" && -e "$serial" ]]
+	then
+		break
+	fi
+
+	sleep 1
+done
+
+# Begin
+/ps2bt/ps2bt "$controller" "$event" "$serial"
+
+# Flush writes
+umount /var/lib/bluetooth
+
+(
+	flock 9 || exit 1
+	touch /tmp/reboot_flag
+
+	/ps2bt/flush
+
+) 9>/tmp/flush_lock
+
+# Reboot
+reboot

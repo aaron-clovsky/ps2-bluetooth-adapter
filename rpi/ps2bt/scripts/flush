@@ -1,0 +1,15 @@
+#!/bin/sh
+
+#
+# Flush writable files to file system if they have changed
+#
+
+dat_timestamp="$(echo $(date -r /tmp/settings.dat))"
+
+if [ "$dat_timestamp" != "$(echo $(cat /tmp/settings.timestamp))" ]; then
+	echo "$dat_timestamp" > /tmp/settings.timestamp
+
+	mount -t vfat -o noatime /dev/mmcblk0p1 /boot
+	cp /tmp/settings.dat /boot/settings.dat
+	umount /boot
+fi

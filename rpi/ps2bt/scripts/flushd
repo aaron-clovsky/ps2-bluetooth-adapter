@@ -1,0 +1,17 @@
+#!/bin/sh
+
+#
+# Flushd - Flush changed files every second
+#
+
+while true; do
+	(
+		flock -n 9 || exit 1
+		[ -e /tmp/reboot_flag ] && exit 1
+
+		/ps2bt/flush
+
+	) 9>/tmp/flush_lock || exit 1
+
+	sleep 1
+done

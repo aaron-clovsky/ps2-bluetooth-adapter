@@ -1,0 +1,32 @@
+From 23f1bfa92ac619fb924ca411f465f402d072b11d Mon Sep 17 00:00:00 2001
+From: root <root@ps2dev.(none)>
+Date: Sun, 22 Nov 2015 16:15:37 -0500
+Subject: [PATCH 1/1] auto-trust ds3 and do not set js0 led
+
+---
+ plugins/sixaxis.c |    2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/plugins/sixaxis.c b/plugins/sixaxis.c
+index ac53ba9..a92f5f1 100644
+--- a/plugins/sixaxis.c
++++ b/plugins/sixaxis.c
+@@ -301,6 +301,7 @@ static bool setup_device(int fd, int index, struct btd_adapter *adapter)
+ 	btd_device_set_pnpid(device, devices[index].source, devices[index].vid,
+ 				devices[index].pid, devices[index].version);
+ 	btd_device_set_temporary(device, FALSE);
++	btd_device_set_trusted(device, TRUE);
+ 
+ 	return true;
+ }
+@@ -431,6 +432,7 @@ static struct leds_data *get_leds_data(struct udev_device *udevice)
+ 
+ 	number = get_js_number(udevice);
+ 	DBG("number %d", number);
++	if (number == 1) return NULL;
+ 
+ 	data = malloc0(sizeof(*data));
+ 	if (!data)
+-- 
+1.7.9.5
+

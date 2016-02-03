@@ -1,0 +1,80 @@
+#!/bin/sh
+
+#
+# DS4 pairing daemon - pairs and trusts controllers for a few seconds after the device boots
+#
+
+# Search for DS4s for 7 seconds
+search() {
+
+	(echo "scan on"; sleep 7; echo "scan off"; sleep 1; echo "exit") | bluetoothctl 2>/dev/nll > /tmp/ds4paird_tmp_search
+
+	# Filter list of controllers trying to pair
+	> /tmp/ds4paird_tmp_search_filtered
+
+	cat /tmp/ds4paird_tmp_search | grep RSSI | while read line; do
+		advertising_controller=`echo $line | cut -d "v" -f 2 | awk '{print $2}'`
+		echo "$advertising_controller" >> /tmp/ds4paird_tmp_search_filtered
+	done
+
+	(sleep 1; echo "exit") | bluetoothctl | grep "Wireless Controller" 2>/dev/null > /tmp/ds4paird_tmp_search_new
+
+	# In case we missed any add any newly enumerated devices to the list
+	grep -Fxvf /tmp/ds4paird_tmp_paired /tmp/ds4paird_tmp_search_new > /tmp/ds4paird_tmp_detected
+
+	cat /tmp/ds4paird_tmp_detected | while read line; do
+		new_controller=`echo $line | awk '{print $4}'`
+		echo "$new_controller" >> /tmp/ds4paird_tmp_search_filtered
+	done
+
+	# Remove duplicates
+	awk '!a[$0]++' /tmp/ds4paird_tmp_search_filtered > /tmp/ds4paird_tmp_search_filtered_nodup
+
+	return
+}
+
+# Enumerate currently paired DS4s
+sleep 1
+(sleep 1; echo "exit") | bluetoothctl | grep "Wireless Controller" 2>/dev/null > /tmp/ds4paird_tmp_paired
+echo >> /tmp/ds4paird_tmp_paired # Needs to contain at least one newline for grep -Fxvf
+
+# Search for controllers
+search
+
+# Allow already paired to controllers to connect here
+sleep 3
+
+# Remove controllers which are both trying to pair and already paired
+echo 0 > /tmp/ds4paird_tmp_removed
+
+cat /tmp/ds4paird_tmp_paired | while read line; do
+	paired_controller=`echo $line | awk '{print $4}'`
+
+	cat /tmp/ds4paird_tmp_search_filtered_nodup | while read line; do
+		advertising_controller=`echo $line`
+
+		if [ "$paired_controller" == "$advertising_controller" ]; then
+			(echo "connect $paired_controller"; sleep 7; echo "exit") | bluetoothctl >/tmp/ds4paird_tmp_connect 2>&1
+
+			is_connected=`cat /tmp/ds4paird_tmp_connect | grep 'Connection successful' | cut -d 'C' -f 2`
+
+			if [ "$is_connected" != "onnection successful" ]; then
+				(echo "remove $paired_controller"; sleep 1; echo "exit") | bluetoothctl >/dev/null 2>&1
+				echo 1 > /tmp/ds4paird_tmp_removed
+			fi
+			exit
+		fi
+	done
+done
+
+# If any controllers were removed then search again
+removed=`cat /tmp/ds4paird_tmp_removed`
+
+if [ "$removed" -eq "1" ]; then
+	search
+fi
+
+# Pair Any DS4 controllers
+cat /tmp/ds4paird_tmp_search_filtered_nodup | while read line; do
+	(echo "pair $line"; sleep 1; echo "trust $line"; sleep 5; echo "exit") | bluetoothctl >/dev/null 2>&1
+done

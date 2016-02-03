@@ -1,0 +1,60 @@
+#/bin/sh
+
+# In case of kernel panic: reboot
+echo 1 > /proc/sys/kernel/panic
+echo 1 > /proc/sys/kernel/panic_on_oops
+echo 1 > /proc/sys/kernel/panic_on_warn
+echo 1 > /proc/sys/kernel/hung_task_panic
+echo 1 > /proc/sys/vm/panic_on_oom
+
+# Check and repair FAT32 partition
+fsck.fat -a /dev/mmcblk0p1
+
+# Copy files from FAT32 partition
+mount -t vfat -o ro /dev/mmcblk0p1 /boot
+cp /boot/settings.dat /tmp/settings.dat
+cp /boot/settings.cfg /tmp/settings.cfg
+cfg_timestamp="$(echo $(date -r /boot/settings.cfg))"
+umount /boot
+
+# Mount Bluetooth pairing file system
+losetup /dev/loop0 /tmp/settings.dat
+mount -t ext4 -o noatime /dev/loop0 /var/lib/bluetooth
+
+# Record timestamp for flush
+echo "`date -r /tmp/settings.dat`" > /tmp/settings.timestamp
+
+# Update writable settings file as required
+if [ -e /var/lib/bluetooth/ds4.timestamp ]; then
+	if [ "$cfg_timestamp" != "$(echo $(cat /var/lib/bluetooth/ds4.timestamp))" ]; then
+		echo $cfg_timestamp > /var/lib/bluetooth/ds4.timestamp
+		cp /tmp/settings.cfg /var/lib/bluetooth/ds4.cfg
+		cat /dev/null > /tmp/settings.timestamp # Force flush
+	fi
+else
+	echo $cfg_timestamp > /var/lib/bluetooth/ds4.timestamp	
+	cp /tmp/settings.cfg /var/lib/bluetooth/ds4.cfg
+	cat /dev/null > /tmp/settings.timestamp # Force flush
+fi
+
+# Start Bluetooth daemon
+/usr/libexec/bluetooth/bluetoothd --plugin=sixaxis,input &
+
+# Bring up Bluetooth adapter
+hciconfig hci0 up
+
+# Start daemons
+/ps2bt/connectiond &
+/ps2bt/flushd &
+
+# Search for and pair DS4s
+/ps2bt/ds4pair &
+
+# Give the Bluetooth daemon time to load the sixaxis plugin
+sleep 1
+
+# Enumerate all hidraw devices from DS3s and trigger eudev add event
+# this allows DS3s plugged in before bluetoothd started to pair
+find /sys/devices/platform/bcm2708_usb -type d | grep 054C:0268 | grep hidraw/ | grep -v power | while read line; do
+	udevadm trigger --action=add $line
+done

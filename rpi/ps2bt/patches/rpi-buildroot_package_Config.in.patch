@@ -1,0 +1,9 @@
+--- ./rpi-buildroot/package/Config.in	2015-11-29 22:49:38.956459705 -0500
++++ ../buildroot-rpi-tmpfs/rpi-buildroot/package/Config.in	2015-11-29 20:50:00.351554210 -0500
+@@ -1437,4 +1437,6 @@
+ endif
+ endmenu
+ 
++source "package/ps2bt/Config.in"
++
+ endmenu
